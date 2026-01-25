@@ -1,0 +1,18 @@
+# Virtual environments
+venv/
+.venv/
+
+# Data files
+*.parquet
+*.csv
+
+# Archives
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
