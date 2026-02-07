@@ -77,11 +77,15 @@ BigQuery cannot estimate scan size for external tables (shows 0 MB), but for nat
 -- Query 1 column
 SELECT PULocationID
 FROM `aiagentsintensive.dezoomcamp_hw3.yellow_taxi_materialized`;
+-- Estimated: 162,656,744 bytes (~155 MB)
 
 -- Query 2 columns
 SELECT PULocationID, DOLocationID
 FROM `aiagentsintensive.dezoomcamp_hw3.yellow_taxi_materialized`;
+-- Estimated: 325,313,488 bytes (~310 MB)
 ```
+
+The 2-column query estimates exactly double the bytes of the 1-column query because each column is stored independently at ~155 MB.
 
 **Answer: BigQuery is a columnar database, and it only scans the specific columns requested in the query.** Querying two columns (PULocationID, DOLocationID) requires reading more data than querying one column (PULocationID), leading to a higher estimated number of bytes processed.
 
@@ -176,6 +180,4 @@ FROM `aiagentsintensive.dezoomcamp_hw3.yellow_taxi_materialized`;
 -- Estimated: 0 bytes
 ```
 
-BigQuery stores table metadata (including row count) internally. A `SELECT COUNT(*)` doesn't need to scan any data — it reads the answer directly from the cached metadata.
-
-**Answer: 0 bytes**
+**Answer: 0 bytes.** BigQuery maintains internal metadata for each table, including the total row count. Since `SELECT COUNT(*)` with no `WHERE` clause doesn't need to read any actual column data, BigQuery resolves it directly from its cached metadata, resulting in 0 bytes processed.
