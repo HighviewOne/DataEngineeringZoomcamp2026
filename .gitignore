@@ -4,10 +4,14 @@ venv/
 
 # Data files
 *.parquet
-*.csv
 
 # Archives
 *.zip
+
+# dbt artifacts
+dbt_packages/
+target/
+logs/
 
 # Python
 __pycache__/
