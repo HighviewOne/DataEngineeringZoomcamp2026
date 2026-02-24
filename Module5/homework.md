@@ -1,119 +1,122 @@
-# Module 5 Homework: Batch Processing (Spark)
+# Module 5 Homework: Data Platforms with Bruin
 
 ## Setup
 
-- **Data**: `yellow_tripdata_2025-11.parquet` (Yellow taxi, November 2025)
-- **PySpark version**: 4.1.1
-- **Java**: OpenJDK 17 (Temurin-17.0.18+8)
-- **JAVA_HOME**: `/home/highview/tools/jdk-17.0.18+8`
-
-> **Note (Spark 4.x)**: Timestamps are `TIMESTAMP_NTZ` type and cannot be cast directly to `BIGINT`.
-> Use `F.unix_timestamp(col.cast('timestamp'))` to convert to seconds for duration calculations.
+- Install Bruin CLI: `curl -LsSf https://getbruin.com/install/cli | sh`
+- Initialize the zoomcamp template: `bruin init zoomcamp my-pipeline`
+- Configure `.bruin.yml` with a DuckDB connection
 
 ---
 
-## Q1: Install Spark and PySpark
+## Q1: Bruin Pipeline Structure
 
-```python
-import pyspark
-from pyspark.sql import SparkSession
+In a Bruin project, what are the required files/directories?
 
-spark = SparkSession.builder \
-    .master("local[*]") \
-    .appName('homework5') \
-    .getOrCreate()
+**Answer: `.bruin.yml` and `pipeline/` with `pipeline.yml` and `assets/`**
 
-print(spark.version)
+After `bruin init`, the project structure is:
+```
+my-pipeline/
+├── .bruin.yml        ← project-level config (environments & connections)
+└── pipeline/
+    ├── pipeline.yml  ← pipeline config (name, schedule, etc.)
+    └── assets/       ← asset definitions (SQL, Python, YAML)
 ```
 
-**Answer: `4.1.1`**
-
 ---
 
-## Q2: Yellow November 2025 — Average Parquet File Size
+## Q2: Materialization Strategies
 
-```python
-df = spark.read.parquet('yellow_tripdata_2025-11.parquet')
-print(f"Total rows: {df.count()}")  # 4,181,444
+Processing NYC taxi data organized by month based on `pickup_datetime`. Which strategy for the staging layer that deduplicates and cleans the data?
 
-df_repartitioned = df.repartition(4)
-df_repartitioned.write.mode('overwrite').parquet('output/')
+**Answer: `time_interval`**
 
-# File sizes: [24.42, 24.41, 24.41, 24.42] MB
-# Average: 24.41 MB
+`time_interval` incrementally loads data within specific time windows using an `incremental_key` (e.g. `pickup_datetime`). It deletes and reinserts records within the window, achieving deduplication without a full rebuild.
+
+```yaml
+materialization:
+  type: time_interval
+  incremental_key: pickup_datetime
+  time_granularity: date
 ```
 
-**Answer: `25MB`** (closest option to actual ~24.41 MB)
+- `append` — just adds rows, no deduplication
+- `replace` — full table rebuild every run, inefficient
+- `view` — virtual table, not materialized
 
 ---
 
-## Q3: Count Trips on November 15, 2025
+## Q3: Pipeline Variables
 
-```python
-from pyspark.sql import functions as F
+Overriding an array variable to only process yellow taxis:
 
-count = df \
-    .withColumn('pickup_date', F.to_date(df.tpep_pickup_datetime)) \
-    .filter("pickup_date = '2025-11-15'") \
-    .count()
-# Result: 162,604
+```yaml
+# pipeline.yml
+variables:
+  taxi_types:
+    type: array
+    default: ["yellow", "green"]
 ```
 
-**Answer: `145,567`** (closest option to actual 162,604)
+**Answer: `bruin run --var 'taxi_types=["yellow"]'`**
+
+Complex types (arrays, objects) require JSON syntax with the `--var` flag.
 
 ---
 
-## Q4: Longest Trip in Hours
+## Q4: Running with Dependencies
 
-```python
-# Note: TIMESTAMP_NTZ requires casting to timestamp before unix_timestamp()
-result = df.withColumn(
-    'duration_hours',
-    (F.unix_timestamp(df.tpep_dropoff_datetime.cast('timestamp'))
-     - F.unix_timestamp(df.tpep_pickup_datetime.cast('timestamp'))) / 3600
-).agg(F.max('duration_hours').alias('max_hours'))
-# Result: 90.65 hours
+Modified `ingestion/trips.py` and want to run it plus all downstream assets.
+
+**Answer: `bruin run ingestion/trips.py --downstream`**
+
+The `--downstream` flag runs the specified asset and all assets that depend on it. The asset is referenced by its file path.
+
+---
+
+## Q5: Quality Checks
+
+Ensure the `pickup_datetime` column never has NULL values.
+
+**Answer: `not_null: true`**
+
+```yaml
+columns:
+  - name: pickup_datetime
+    checks:
+      - name: not_null
 ```
 
-**Answer: `90.6`**
+The `not_null` check verifies that none of the column's values are null.
 
 ---
 
-## Q5: Spark UI Port
+## Q6: Lineage and Dependencies
 
-Spark's User Interface dashboard runs on local port:
+Visualize the dependency graph between assets.
 
-**Answer: `4040`**
+**Answer: `bruin lineage`**
 
----
-
-## Q6: Least Frequent Pickup Location Zone
-
-```python
-zones = spark.read.option("header", "true").csv('taxi_zone_lookup.csv')
-df.createOrReplaceTempView('yellow_2025_11')
-zones.createOrReplaceTempView('zones')
-
-spark.sql("""
-SELECT z.Zone, COUNT(1) as trip_count
-FROM yellow_2025_11 y
-LEFT JOIN zones z ON y.PULocationID = CAST(z.LocationID AS INT)
-GROUP BY z.Zone
-ORDER BY trip_count ASC
-LIMIT 5
-""").show(truncate=False)
+```bash
+bruin lineage path/to/asset.sql
+bruin lineage path/to/asset.sql --full   # includes all indirect dependencies
 ```
 
-Results (3-way tie at 1 trip):
-| Zone | trip_count |
-|------|------------|
-| Governor's Island/Ellis Island/Liberty Island | 1 |
-| Eltingville/Annadale/Prince's Bay | 1 |
-| Arden Heights | 1 |
-| Port Richmond | 3 |
-| Rikers Island | 4 |
+`bruin graph`, `bruin dependencies`, and `bruin show` do not exist as Bruin commands.
 
-**Answer: `Governor's Island/Ellis Island/Liberty Island`**
+---
+
+## Q7: First-Time Run
+
+Running on a new DuckDB database — ensure tables are created from scratch.
+
+**Answer: `--full-refresh`**
+
+```bash
+bruin run --full-refresh
+```
+
+`--full-refresh` truncates the table before running. Also sets the `full_refresh` Jinja variable to `True` and `BRUIN_FULL_REFRESH=1`.
 
 ---
 
@@ -121,9 +124,10 @@ Results (3-way tie at 1 trip):
 
 | Q | Answer |
 |---|--------|
-| Q1: Spark version | `4.1.1` |
-| Q2: Avg parquet file size | `25MB` (actual ~24.41 MB) |
-| Q3: Trips on Nov 15 | `145,567` (actual 162,604) |
-| Q4: Longest trip (hours) | `90.6` |
-| Q5: Spark UI port | `4040` |
-| Q6: Least frequent zone | `Governor's Island/Ellis Island/Liberty Island` |
+| Q1: Required project structure | `.bruin.yml` and `pipeline/` with `pipeline.yml` and `assets/` |
+| Q2: Materialization strategy | `time_interval` |
+| Q3: Override array variable | `bruin run --var 'taxi_types=["yellow"]'` |
+| Q4: Run with downstream | `bruin run ingestion/trips.py --downstream` |
+| Q5: Null quality check | `not_null: true` |
+| Q6: Visualize dependency graph | `bruin lineage` |
+| Q7: First-time run flag | `--full-refresh` |
