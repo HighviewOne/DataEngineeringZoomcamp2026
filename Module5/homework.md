@@ -75,7 +75,7 @@ result = df.withColumn(
 # Result: 90.65 hours
 ```
 
-**Answer: `122`** (closest option to actual 90.65 hours)
+**Answer: `90.6`**
 
 ---
 
@@ -124,6 +124,6 @@ Results (3-way tie at 1 trip):
 | Q1: Spark version | `4.1.1` |
 | Q2: Avg parquet file size | `25MB` (actual ~24.41 MB) |
 | Q3: Trips on Nov 15 | `145,567` (actual 162,604) |
-| Q4: Longest trip (hours) | `122` (actual 90.65 hours) |
+| Q4: Longest trip (hours) | `90.6` |
 | Q5: Spark UI port | `4040` |
 | Q6: Least frequent zone | `Governor's Island/Ellis Island/Liberty Island` |
