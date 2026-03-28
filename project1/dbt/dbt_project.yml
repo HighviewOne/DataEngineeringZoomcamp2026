@@ -1,0 +1,17 @@
+name: 'socal_nod'
+version: '1.0.0'
+config-version: 2
+
+profile: 'socal_nod'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+models:
+  socal_nod:
+    staging:
+      +materialized: view
+      +dataset: nod_production
+    marts:
+      +materialized: table
+      +dataset: nod_production

@@ -1,0 +1,66 @@
+id: nod_daily_pipeline
+namespace: socal_nod
+
+description: |
+  Daily pipeline: upload new RETRAN_NODs CSV to GCS, load into BigQuery raw,
+  then run dbt transformations.
+
+triggers:
+  - id: daily_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 9 * * 1-5"  # 9am Mon-Fri
+
+inputs:
+  - id: nod_date
+    type: STRING
+    description: "Date of NOD file (YYYY-MM-DD). Defaults to today."
+    defaults: "{{ now() | dateAdd(-0, 'DAYS') | date('yyyy-MM-dd') }}"
+
+variables:
+  project_id: aiagentsintensive
+  bucket: aiagentsintensive-nod-lake
+  dataset: nod_raw
+  table: nods
+  nod_dir: /home/highview/retran
+  dbt_dir: /home/highview/DataEngineeringZoomcamp2026/project1/dbt
+
+tasks:
+  - id: check_file_exists
+    type: io.kestra.plugin.scripts.shell.Commands
+    commands:
+      - |
+        FILE="{{ vars.nod_dir }}/RETRAN_NODs_{{ inputs.nod_date }}.csv"
+        if [ ! -f "$FILE" ]; then
+          echo "ERROR: File not found: $FILE"
+          exit 1
+        fi
+        ROWS=$(wc -l < "$FILE")
+        echo "Found $FILE with $ROWS lines"
+
+  - id: upload_to_gcs
+    type: io.kestra.plugin.scripts.shell.Commands
+    commands:
+      - |
+        gsutil cp "{{ vars.nod_dir }}/RETRAN_NODs_{{ inputs.nod_date }}.csv" \
+          "gs://{{ vars.bucket }}/nods/RETRAN_NODs_{{ inputs.nod_date }}.csv"
+        echo "Uploaded to gs://{{ vars.bucket }}/nods/RETRAN_NODs_{{ inputs.nod_date }}.csv"
+
+  - id: load_to_bigquery
+    type: io.kestra.plugin.scripts.shell.Commands
+    commands:
+      - |
+        bq load \
+          --source_format=CSV \
+          --skip_leading_rows=1 \
+          --replace=false \
+          "{{ vars.project_id }}:{{ vars.dataset }}.{{ vars.table }}" \
+          "gs://{{ vars.bucket }}/nods/RETRAN_NODs_{{ inputs.nod_date }}.csv"
+        echo "Loaded into BigQuery {{ vars.dataset }}.{{ vars.table }}"
+
+  - id: run_dbt
+    type: io.kestra.plugin.scripts.shell.Commands
+    commands:
+      - |
+        cd "{{ vars.dbt_dir }}"
+        dbt run
+        echo "dbt run complete"

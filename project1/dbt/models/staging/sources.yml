@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: nod_raw
+    config:
+      project: aiagentsintensive
+      dataset: nod_raw
+    tables:
+      - name: nods
+        description: "Raw NOD records loaded from daily CSV files"
