@@ -12,7 +12,7 @@ cleaned as (
         county,
 
         -- county label
-        case county
+        case coalesce(county, '')
             when ''   then 'Los Angeles'
             when 'OC' then 'Orange'
             when 'RI' then 'Riverside'
