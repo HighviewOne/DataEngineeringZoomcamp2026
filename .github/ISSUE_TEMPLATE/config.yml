@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📺 Data Engineering Zoomcamp (course)
+    url: https://github.com/DataTalksClub/data-engineering-zoomcamp
+    about: Official course repository, syllabus, and materials.
+  - name: 💬 DataTalks.Club Community
+    url: https://datatalks.club/
+    about: Ask the community in the DataTalks.Club Slack.
